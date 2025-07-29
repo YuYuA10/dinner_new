@@ -1,0 +1,314 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>食事記録システム</title>
+
+  <!-- フォントとFirebase -->
+  <link href="https://fonts.googleapis.com/css2?family=Kiwi+Maru&display=swap" rel="stylesheet">
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js"></script>
+
+  <style>
+    body {
+      font-family: 'Kiwi Maru', sans-serif;
+      margin: 20px;
+      background-color: #fff0f5;
+      color: #444;
+    }
+    h1, h2 {
+      text-align: center;
+      color: #d63384;
+    }
+    form, #searchForm {
+      margin-bottom: 20px;
+      padding: 15px;
+      background-color: #fff;
+      border: 2px dashed #f5c2e7;
+      border-radius: 15px;
+      box-shadow: 0 3px 10px rgba(255, 192, 203, 0.2);
+    }
+    input, select, button {
+      margin-bottom: 12px;
+      padding: 10px;
+      border: 1px solid #f5c2e7;
+      border-radius: 12px;
+      width: 100%;
+      font-size: 1em;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    }
+    button {
+      background-color: #ffb6c1;
+      color: white;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      font-weight: bold;
+    }
+    button:hover {
+      background-color: #ff6fa1;
+    }
+    table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0 8px;
+      margin-top: 20px;
+    }
+    th, td {
+      border: 1px solid #ffe0f0;
+      padding: 10px;
+      text-align: center;
+      background-color: #fffafc;
+      border-radius: 10px;
+    }
+    th {
+      background-color: #ffe0f0;
+      color: #a3006b;
+    }
+    .sortable {
+      cursor: pointer;
+      color: #ff69b4;
+      text-decoration: underline;
+    }
+    .sortable:hover {
+      color: #ff1493;
+    }
+    .delete-btn, .edit-btn {
+      padding: 6px 12px;
+      font-weight: bold;
+      border: none;
+      border-radius: 8px;
+    }
+    .delete-btn {
+      background-color: #ff6b6b;
+    }
+    .edit-btn {
+      background-color: #87cefa;
+    }
+    #counts {
+      margin-top: 20px;
+      display: flex;
+      justify-content: space-between;
+      gap: 20px;
+    }
+    .count-card {
+      flex: 1;
+      padding: 20px;
+      text-align: center;
+      background-color: #fff;
+      border: 2px solid #ffe0f0;
+      border-radius: 20px;
+      box-shadow: 0 5px 10px rgba(255, 105, 180, 0.2);
+    }
+    .count-card h3 {
+      font-size: 1.2em;
+      margin-bottom: 10px;
+      color: #d63384;
+    }
+    .count-card span {
+      font-size: 2.5em;
+      font-weight: bold;
+    }
+    .count-card:nth-child(1) span { color: #f78fb3; }
+    .count-card:nth-child(2) span { color: #63cdda; }
+    .count-card:nth-child(3) span { color: #a29bfe; }
+  </style>
+</head>
+<body>
+  <h1>食事記録システム</h1>
+
+  <form id="mealForm">
+    <label for="date">日付</label>
+    <input type="date" id="date" required>
+
+    <label for="mealType">自炊・外食・学食</label>
+    <select id="mealType" required>
+      <option value="">選択してください</option>
+      <option value="自炊">自炊</option>
+      <option value="外食">外食</option>
+      <option value="学食">学食</option>
+    </select>
+
+    <label for="mealTime">昼食・夜食</label>
+    <select id="mealTime" required>
+      <option value="">選択してください</option>
+      <option value="昼食">昼食</option>
+      <option value="夜食">夜食</option>
+    </select>
+
+    <label for="food">食べたもの</label>
+    <input type="text" id="food" placeholder="例: ラーメン" required>
+
+    <button type="button" onclick="addOrUpdateMeal()" id="submitBtn">追加</button>
+  </form>
+
+  <form id="searchForm">
+    <label for="search">検索</label>
+    <input type="text" id="search" placeholder="例: ラーメン、自炊" oninput="searchMeals()">
+  </form>
+
+  <h2>記録一覧</h2>
+  <table id="mealTable">
+    <thead>
+      <tr>
+        <th class="sortable" onclick="sortTableByDate()">日付</th>
+        <th>種類</th>
+        <th>昼食/夜食</th>
+        <th>食べたもの</th>
+        <th>操作</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="counts">
+    <div class="count-card"><h3>自炊</h3><span id="selfCookCount">0</span> 回</div>
+    <div class="count-card"><h3>外食</h3><span id="dineOutCount">0</span> 回</div>
+    <div class="count-card"><h3>学食</h3><span id="schoolCount">0</span> 回</div>
+  </div>
+
+  <div id="ranking">
+    <h2>食べたものランキング</h2>
+    <table>
+      <thead>
+        <tr><th>順位</th><th>食べたもの</th><th>回数</th></tr>
+      </thead>
+      <tbody id="foodRanking"></tbody>
+    </table>
+  </div>
+
+
+  <script>
+    // 🔧 Firebase初期化
+    const firebaseConfig = {
+  apiKey: "AIzaSyCovkbkJ-UHZp8kE9-yxRtgG941IxPfgJg",
+  authDomain: "dinner-66935.firebaseapp.com",
+  databaseURL: "https://dinner-66935-default-rtdb.firebaseio.com",
+  projectId: "dinner-66935",
+  storageBucket: "dinner-66935.appspot.com",
+  messagingSenderId: "489132414093",
+  appId: "1:489132414093:web:8a9b5e6fd37a5b89303ec4",
+  measurementId: "G-6SHMQQTS0Y"
+};
+
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const ref = db.ref("meals");
+
+    let meals = [];
+    let editIndex = null;
+    let sortAsc = true;
+
+    // 初期日付
+    window.onload = function () {
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      document.getElementById("date").value = now.toISOString().split("T")[0];
+    };
+
+    // リアルタイム取得
+    ref.on("value", snapshot => {
+      meals = snapshot.val() || [];
+      renderTable();
+      renderCounts();
+      renderRanking();
+    });
+
+    function addOrUpdateMeal() {
+      const date = dateInput.value;
+      const mealType = mealTypeInput.value;
+      const mealTime = mealTimeInput.value;
+      const food = foodInput.value;
+      if (!date || !mealType || !mealTime || !food) return alert("すべての項目を入力してください！");
+      if (editIndex === null) meals.push({ date, mealType, mealTime, food });
+      else {
+        meals[editIndex] = { date, mealType, mealTime, food };
+        editIndex = null;
+        submitBtn.innerText = "追加";
+      }
+      ref.set(meals);
+      mealForm.reset();
+      const now = new Date();
+      now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+      dateInput.value = now.toISOString().split("T")[0];
+    }
+
+    function deleteMeal(index) {
+      meals.splice(index, 1);
+      ref.set(meals);
+    }
+
+    function confirmDelete(index) {
+      const m = meals[index];
+      if (confirm(`削除していいですか？\\n${m.date} ${m.mealType} ${m.mealTime} ${m.food}`)) deleteMeal(index);
+    }
+
+    function renderTable(filtered = meals) {
+      const tbody = document.querySelector("#mealTable tbody");
+      tbody.innerHTML = "";
+      filtered.forEach((m, i) => {
+        tbody.innerHTML += `<tr>
+          <td>${m.date}</td><td>${m.mealType}</td><td>${m.mealTime}</td><td>${m.food}</td>
+          <td><button class='edit-btn' onclick='editMeal(${i})'>編集</button>
+              <button class='delete-btn' onclick='confirmDelete(${i})'>削除</button></td></tr>`;
+      });
+    }
+
+    function editMeal(index) {
+      const m = meals[index];
+      dateInput.value = m.date;
+      mealTypeInput.value = m.mealType;
+      mealTimeInput.value = m.mealTime;
+      foodInput.value = m.food;
+      editIndex = index;
+      submitBtn.innerText = "保存";
+    }
+
+    function renderCounts() {
+      selfCookCount.innerText = meals.filter(m => m.mealType === "自炊").length;
+      dineOutCount.innerText = meals.filter(m => m.mealType === "外食").length;
+      schoolCount.innerText = meals.filter(m => m.mealType === "学食").length;
+    }
+
+    function renderRanking() {
+      const counts = meals.reduce((acc, m) => {
+        acc[m.food] = (acc[m.food] || 0) + 1;
+        return acc;
+      }, {});
+      const sorted = Object.entries(counts).sort((a, b) => b[1] - a[1]);
+      foodRanking.innerHTML = sorted.map(([f, c], i) =>
+        `<tr><td>${i + 1} 位</td><td>${f}</td><td>${c} 回</td></tr>`).join('');
+    }
+
+    function searchMeals() {
+      const q = search.value.toLowerCase();
+      const f = meals.filter(m =>
+        m.date.includes(q) ||
+        m.mealType.includes(q) ||
+        m.mealTime.includes(q) ||
+        m.food.includes(q));
+      renderTable(f);
+    }
+
+    function sortTableByDate() {
+      meals.sort((a, b) => sortAsc
+        ? new Date(a.date) - new Date(b.date)
+        : new Date(b.date) - new Date(a.date));
+      sortAsc = !sortAsc;
+      renderTable();
+    }
+
+    function goToCalendar() {
+      const encoded = encodeURIComponent(JSON.stringify(meals));
+      location.href = `calendar.html?data=${encoded}`;
+    }
+
+    const dateInput = document.getElementById("date");
+    const mealTypeInput = document.getElementById("mealType");
+    const mealTimeInput = document.getElementById("mealTime");
+    const foodInput = document.getElementById("food");
+    const mealForm = document.getElementById("mealForm");
+    const submitBtn = document.getElementById("submitBtn");
+  </script>
+</body>
+</html>
