@@ -247,11 +247,11 @@ function editMeal(key) {
   submitBtn.innerText = "保存";
 }
 
-function renderTable() {
+function renderTable(filtered = meals) {
   const tbody = document.querySelector("#mealTable tbody");
   tbody.innerHTML = "";
-  for (const key in meals) {
-    const m = meals[key];
+  for (const key in filtered) {
+    const m = filtered[key];
     tbody.innerHTML += `<tr>
       <td>${m.date}</td>
       <td>${m.mealType}</td>
@@ -264,6 +264,7 @@ function renderTable() {
     </tr>`;
   }
 }
+
 
 function renderCounts() {
   const all = Object.values(meals);
@@ -297,8 +298,7 @@ function searchMeals() {
       filtered[key] = m;
     }
   }
-  meals = filtered;
-  renderTable();
+  renderTable(filtered); 
 }
 
   </script>
